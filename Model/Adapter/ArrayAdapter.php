@@ -1,5 +1,5 @@
 <?php
-namespace FireGento\FastSimpleExport\Model\Export\Adapter;
+namespace FireGento\FastSimpleExport\Model\Adapter;
 use Magento\ImportExport\Model\Export\Adapter\AbstractAdapter;
 use Magento\Framework\Filesystem;
 use Magento\Framework\App\Filesystem\DirectoryList;
@@ -10,6 +10,7 @@ class ArrayAdapter extends \Magento\ImportExport\Model\Export\Adapter\AbstractAd
      * @var int
      */
     protected $length = 0;
+    protected $arr = array();
 
     public function __construct(
         \Magento\Framework\Filesystem $filesystem,
@@ -20,10 +21,11 @@ class ArrayAdapter extends \Magento\ImportExport\Model\Export\Adapter\AbstractAd
     }
     public function writeRow(array $rowData)
     {
+        $this->arr[] = $rowData;
         $this->length++;
     }
     public function getContents()
     {
-        return str_repeat("a\n",$this->length+1);
+        return $this->arr;
     }
 }

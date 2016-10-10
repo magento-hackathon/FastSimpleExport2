@@ -5,13 +5,12 @@
  *  * See LICENSE.md bundled with this module for license details.
  *
  */
-namespace FireGento\FastSimpleExport\Model\Export;
+namespace FireGento\FastSimpleExport\Model\Entity\Order;
 
 /**
  * Export entity customer model
- *
- * @method \Magento\Customer\Model\ResourceModel\Attribute\Collection getAttributeCollection() getAttributeCollection()
  */
+
 class Order extends \Magento\ImportExport\Model\Export\Entity\AbstractEav
 {
     /**#@+
@@ -20,9 +19,6 @@ class Order extends \Magento\ImportExport\Model\Export\Entity\AbstractEav
      * Names that begins with underscore is not an attribute. This name convention is for
      * to avoid interference with same attribute name.
      */
-    const COLUMN_EMAIL = 'email';
-
-    const COLUMN_WEBSITE = '_website';
 
     const COLUMN_STORE = '_store';
 
@@ -31,14 +27,8 @@ class Order extends \Magento\ImportExport\Model\Export\Entity\AbstractEav
     /**#@+
      * Attribute collection name
      */
-    const ATTRIBUTE_COLLECTION_NAME = 'Magento\Customer\Model\ResourceModel\Attribute\Collection';
+    const ATTRIBUTE_COLLECTION_NAME = 'FireGento\FastSimpleExport\Model\Entity\Order\OrderAttributeCollection';
 
-    /**#@-*/
-
-    /**#@+
-     * XML path to page size parameter
-     */
-    const XML_PATH_PAGE_SIZE = 'export/customer_page_size/customer';
 
     /**#@-*/
 
@@ -65,30 +55,30 @@ class Order extends \Magento\ImportExport\Model\Export\Entity\AbstractEav
      *
      * @var string[]
      */
-    protected $_indexValueAttributes = ['group_id', 'website_id', 'store_id'];
+    protected $_indexValueAttributes = ['store_id'];
 
     /**
      * Permanent entity columns.
      *
      * @var string[]
      */
-    protected $_permanentAttributes = [self::COLUMN_EMAIL, self::COLUMN_WEBSITE, self::COLUMN_STORE];
+    protected $_permanentAttributes = [self::COLUMN_STORE];
 
     /**
-     * Customers whose data is exported
-     *
-     * @var \Magento\Customer\Model\ResourceModel\Customer\Collection
+     * @var \Magento\Sales\Model\ResourceModel\Order\Collection|mixed
      */
-    protected $_customerCollection;
+    protected $orderCollection;
+
 
     /**
+     * Order constructor.
      * @param \Magento\Framework\App\Config\ScopeConfigInterface $scopeConfig
      * @param \Magento\Store\Model\StoreManagerInterface $storeManager
      * @param \Magento\ImportExport\Model\Export\Factory $collectionFactory
      * @param \Magento\ImportExport\Model\ResourceModel\CollectionByPagesIteratorFactory $resourceColFactory
      * @param \Magento\Framework\Stdlib\DateTime\TimezoneInterface $localeDate
      * @param \Magento\Eav\Model\Config $eavConfig
-     * @param \Magento\Customer\Model\ResourceModel\Customer\CollectionFactory $customerColFactory
+     * @param \Magento\Sales\Model\ResourceModel\Order\CollectionFactory $orderFactory
      * @param array $data
      */
     public function __construct(
@@ -98,9 +88,10 @@ class Order extends \Magento\ImportExport\Model\Export\Entity\AbstractEav
         \Magento\ImportExport\Model\ResourceModel\CollectionByPagesIteratorFactory $resourceColFactory,
         \Magento\Framework\Stdlib\DateTime\TimezoneInterface $localeDate,
         \Magento\Eav\Model\Config $eavConfig,
-        \Magento\Sales\Model\ResourceModel\Order\CollectionFactory $customerColFactory,
+        \Magento\Sales\Model\ResourceModel\Order\CollectionFactory $orderFactory,
         array $data = []
-    ) {
+    )
+    {
         parent::__construct(
             $scopeConfig,
             $storeManager,
@@ -111,9 +102,7 @@ class Order extends \Magento\ImportExport\Model\Export\Entity\AbstractEav
             $data
         );
 
-        $this->_customerCollection = isset(
-            $data['customer_collection']
-        ) ? $data['customer_collection'] : $customerColFactory->create();
+        $this->orderCollection = $orderFactory->create();
 
         $this->_initAttributeValues()->_initStores()->_initWebsites(true);
     }
@@ -125,14 +114,19 @@ class Order extends \Magento\ImportExport\Model\Export\Entity\AbstractEav
      */
     public function export()
     {
-        $this->_prepareEntityCollection($this->_getEntityCollection());
         $writer = $this->getWriter();
-
-        // create export file
         $writer->setHeaderCols($this->_getHeaderColumns());
         $this->_exportCollectionByPages($this->_getEntityCollection());
-
         return $writer->getContents();
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    protected function _getHeaderColumns()
+    {
+        $validAttributeCodes = $this->_getExportAttributeCodes();
+        return array_merge($this->_permanentAttributes, $validAttributeCodes);
     }
 
     /**
@@ -142,16 +136,7 @@ class Order extends \Magento\ImportExport\Model\Export\Entity\AbstractEav
      */
     protected function _getEntityCollection()
     {
-        return $this->_customerCollection;
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    protected function _getHeaderColumns()
-    {
-        $validAttributeCodes = $this->_getExportAttributeCodes();
-        return array_merge($this->_permanentAttributes, $validAttributeCodes, ['password']);
+        return $this->orderCollection;
     }
 
     /**
@@ -162,34 +147,11 @@ class Order extends \Magento\ImportExport\Model\Export\Entity\AbstractEav
      */
     public function exportItem($item)
     {
-        $row = $this->_addAttributeValuesToRow($item);
-        $row[self::COLUMN_WEBSITE] = $this->_websiteIdToCode[$item->getWebsiteId()];
+        $row = $item->getData();
         $row[self::COLUMN_STORE] = $this->_storeIdToCode[$item->getStoreId()];
-
         $this->getWriter()->writeRow($row);
     }
 
-    /**
-     * Clean up already loaded attribute collection.
-     *
-     * @param \Magento\Framework\Data\Collection $collection
-     * @return \Magento\Framework\Data\Collection
-     */
-    public function filterAttributeCollection(\Magento\Framework\Data\Collection $collection)
-    {
-        /** @var $attribute \Magento\Customer\Model\Attribute */
-        foreach (parent::filterAttributeCollection($collection) as $attribute) {
-            if (!empty($this->_attributeOverrides[$attribute->getAttributeCode()])) {
-                $data = $this->_attributeOverrides[$attribute->getAttributeCode()];
-
-                if (isset($data['options_method']) && method_exists($this, $data['options_method'])) {
-                    $data['filter_options'] = $this->{$data['options_method']}();
-                }
-                $attribute->addData($data);
-            }
-        }
-        return $collection;
-    }
 
     /**
      * EAV entity type code getter.
@@ -198,7 +160,7 @@ class Order extends \Magento\ImportExport\Model\Export\Entity\AbstractEav
      */
     public function getEntityTypeCode()
     {
-        return "sales_order";//$this->getAttributeCollection()->getEntityTypeCode();
+        return $this->getAttributeCollection()->getEntityTypeCode();
     }
 
     /**

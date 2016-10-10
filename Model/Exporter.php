@@ -13,10 +13,10 @@ class Exporter
 
     /**
      * Exporter constructor.
-     * @param \Magento\ImportExport\Model\ExportFactory $exportFactory
+     * @param \FireGento\FastSimpleExport\Model\Export\ExportFactory $exportFactory
      */
     public function __construct(
-        \Magento\ImportExport\Model\ExportFactory $exportFactory
+        \FireGento\FastSimpleExport\Model\Export\ExportFactory $exportFactory
     )
     {
         $this->exportFactory = $exportFactory;
